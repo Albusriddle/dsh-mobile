@@ -1,58 +1,97 @@
 # dsh-mobile
 
-DeepSeek Harness（DSH）的 Android 手机端工程，含两条路线：
+**Android client for DeepSeek Harness (DSH)** — a native protocol-v1 WebSocket client plus a WebView shell for the official DSH web UI. Built for phones that reach their DSH host over [Tailscale](https://tailscale.com).
 
-| 目录 | 是什么 | 状态 |
+`deepseek-harness` · `deepseek` · `ai-agent` · `android` · `mobile-client` · `protocol-v1` · `websocket` · `tailscale` · `remote-control` · `webview`
+
+---
+
+## What is this?
+
+DSH (DeepSeek Harness) is an agentic coding/automation host that runs on your desktop. This repo makes it usable from an Android phone:
+
+| Directory | What it is | Status |
 |---|---|---|
-| `android/` | **WebView 外壳**：把 DSH 官方 Web UI 装进原生壳（重前端快照、polyfill、移动外壳 CSS/JS 注入） | 可用（适配旧版 `dsh-remote-web-ui` 浏览器远程；该插件已被上游退役） |
-| `native/` | **原生客户端**：走 `@linxin666/dsh-remote-bridge` 的协议 v1（`/ios/v1` WebSocket），原生渲染会话 | 进行中（P1 竖切：配对 + 列表 + 打开 + 发送） |
-| `scripts/` | 调试与验证脚本：协议探针、CDP 抓包、前端快照抓取 | 可用 |
+| `native/` | **Native client** speaking the `@linxin666/dsh-remote-bridge` **protocol v1** (`/ios/v1` WebSocket): pairing, session list, snapshot rendering, prompt/interrupt | Main line — P1 vertical slice working on-device |
+| `android/` | **WebView shell**: ships a front-end snapshot inside the APK, polyfills old WebView kernels, injects a mobile layout | Legacy (targets the retired `dsh-remote-web-ui` browser remote; kept for rollback) |
+| `scripts/` | Protocol probe (pairing + list + snapshot), CDP helpers, front-end snapshotter, GitHub-API pusher | Working |
 
-## 背景：为什么有两套
+### Why two apps
 
-DSH 的远程访问在插件 `@linxin666/dsh-web-all` 0.4.13+ 发生换代：
+The DSH remote-access plugin changed in `@linxin666/dsh-web-all` 0.4.13+:
 
-- `dsh-remote-web-ui`（浏览器远程控制）**已退役**
-- 替代者 `dsh-remote-bridge` 发布**协议 v1**，在宿主 `/ios/v1` 提供单个 WebSocket 面，专供原生 App 使用：
-  配对（一次性 bootstrap token + P-256 挑战应答）、会话列表/快照/发言/中断、审批直达、指令、工作区、分支、用量、`ui_present` 卡片等
+- `dsh-remote-web-ui` (browser-based remote control) was **retired upstream**
+- Its replacement `dsh-remote-bridge` publishes **protocol v1**: one WebSocket face at `/ios/v1` designed for native apps — one-shot bootstrap token + P-256 challenge/response pairing, session list/snapshot/prompt/interrupt, approvals, commands, workspaces, fork, usage and `ui_present` cards
 
-因此 `android/` 是历史路线（仍可用于回退），`native/` 是当前主线。
+So `android/` is history and `native/` is the current line.
 
-## 构建 android/（WebView 外壳）
+### Protocol v1 at a glance
 
-```bash
-cd android
-# 1) 生成前端快照（从本机运行的 DSH host 抓取）
-node ../scripts/snapshot-web.mjs
-# 2) 构建
-export JAVA_HOME=/path/to/jdk17
-./gradlew assembleRelease
+```
+GET  /remote-bridge/pair/token          (loopback only) → one-shot bootstrap token, 30 s TTL
+WS   /ios/v1?token=<bootstrap>          → hello → pair.begin → ES256 sign nonce → pair.finish
+                                          → deviceToken; later connects send
+                                          Authorization: Bearer <deviceToken>
+     session.list / session.snapshot / session.prompt / session.interrupt / ...
 ```
 
-依赖：JDK 17、Android SDK（build-tools 35、platform 35）、Gradle 8.10+。
-
-## 协议 v1 探针
+Try it without the app:
 
 ```bash
 node scripts/bridge-probe.mjs http://127.0.0.1:3080
 ```
 
-会完整跑一遍：`GET /remote-bridge/pair/token` → `hello` → `pair.begin` → ES256 签名 → `pair.finish` → `session.list` → `session.snapshot`。
+## Build
 
-## 网络
+**native/** (protocol v1 client, Java + OkHttp)
 
-手机通过 Tailscale 接入宿主：`wss://<host>.ts.net/ios/v1`（参考 `tailscale serve` 把 443 转发到 `127.0.0.1:3080`）。
-本机调试可用 `adb reverse tcp:3080 tcp:3080` 后连 `ws://127.0.0.1:3080/ios/v1`。
+```bash
+cd native
+export JAVA_HOME=/path/to/jdk17     # JDK 17, Android SDK 35, Gradle 8.10+
+./gradlew assembleDebug
+# test: adb reverse tcp:3080 tcp:3080, then open the app and pair with ws://127.0.0.1:3080
+```
+
+**android/** (WebView shell)
+
+```bash
+cd android
+node ../scripts/snapshot-web.mjs    # snapshot the running DSH host's static assets
+export JAVA_HOME=/path/to/jdk17
+./gradlew assembleRelease
+```
+
+## Networking
+
+Phones join the host's tailnet and use `wss://<host>.ts.net/ios/v1` (a `tailscale serve` rule forwards 443 → `127.0.0.1:3080`). For local debugging use `adb reverse tcp:3080 tcp:3080` and connect to `ws://127.0.0.1:3080`.
+
+> Note: on a network where `github.com:443` is unreachable, pushes go through the GitHub REST API — see `scripts/github-push.mjs`.
+
+---
+
+# 中文说明
+
+DeepSeek Harness（DSH）的 Android 手机端工程，含两条路线：
+
+| 目录 | 是什么 | 状态 |
+|---|---|---|
+| `native/` | **原生客户端**：走 `@linxin666/dsh-remote-bridge` 协议 v1（`/ios/v1` WebSocket），原生渲染会话 | 主线，P1 竖切已在真机跑通 |
+| `android/` | **WebView 外壳**：把官方 Web UI 装进原生壳（前端快照、polyfill、移动外壳注入） | 历史路线（适配已退役的 `dsh-remote-web-ui`，保留可回退） |
+| `scripts/` | 协议探针、CDP 抓包、前端快照抓取、GitHub API 推送 | 可用 |
+
+### native/ 进展（P1 竖切）
+
+- ✅ 配对：bootstrap token + ES256(P-256) 挑战应答，`deviceToken` 持久化
+- ✅ 重连：`Authorization: Bearer <deviceToken>`
+- ✅ 会话列表：`session.list`，按 `cwd` 分组
+- ✅ 打开会话：`session.snapshot` 渲染 user / assistant / tool 条目
+- ⏳ 发送与中断：`session.prompt` / `session.interrupt` 已接好，待真机验证
+- ⏳ 审批弹层、增量续传、后台保活（P2）
+
+### 网络
+
+手机加入宿主的 tailnet，连 `wss://<host>.ts.net/ios/v1`（`tailscale serve` 把 443 转发到 `127.0.0.1:3080`）。本机调试：`adb reverse tcp:3080 tcp:3080` 后连 `ws://127.0.0.1:3080`。
 
 ## 许可
 
 自用工程，未附许可证；涉及的第三方插件版权归其作者。
-
-## native/ 进展（P1 竖切）
-
-- ✅ 配对：bootstrap token + ES256(P-256) 挑战应答，deviceToken 持久化
-- ✅ 配对重连：`Authorization: Bearer <deviceToken>`
-- ✅ 会话列表：`session.list`，按 cwd 分组
-- ✅ 打开会话：`session.snapshot` 渲染 user/assistant/tool 条目
-- ⏳ 发送/中断：`session.prompt` / `session.interrupt`（代码就绪，待真机验证）
-- 构建：`cd native && ./gradlew assembleDebug`；生成 APK 后用 `adb reverse tcp:3080 tcp:3080` 并在应用里填 `ws://127.0.0.1:3080`
