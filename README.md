@@ -47,3 +47,12 @@ node scripts/bridge-probe.mjs http://127.0.0.1:3080
 ## 许可
 
 自用工程，未附许可证；涉及的第三方插件版权归其作者。
+
+## native/ 进展（P1 竖切）
+
+- ✅ 配对：bootstrap token + ES256(P-256) 挑战应答，deviceToken 持久化
+- ✅ 配对重连：`Authorization: Bearer <deviceToken>`
+- ✅ 会话列表：`session.list`，按 cwd 分组
+- ✅ 打开会话：`session.snapshot` 渲染 user/assistant/tool 条目
+- ⏳ 发送/中断：`session.prompt` / `session.interrupt`（代码就绪，待真机验证）
+- 构建：`cd native && ./gradlew assembleDebug`；生成 APK 后用 `adb reverse tcp:3080 tcp:3080` 并在应用里填 `ws://127.0.0.1:3080`
