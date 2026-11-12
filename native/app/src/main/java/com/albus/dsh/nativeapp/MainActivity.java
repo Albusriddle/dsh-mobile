@@ -241,6 +241,12 @@ public class MainActivity extends Activity {
             }
         };
         listView.setAdapter(listAdapter);
+        listView.setOnItemLongClickListener((parent, view, position, id) -> {
+            String sessionId = listIds.get(position);
+            if (sessionId.isEmpty()) return false;
+            showSessionMenu(sessionId);
+            return true;
+        });
         listView.setOnItemClickListener((parent, view, position, id) -> {
             String sessionId = listIds.get(position);
             if (!sessionId.isEmpty()) openSession(sessionId);
@@ -423,6 +429,46 @@ public class MainActivity extends Activity {
                 });
             } catch (Exception error) {
                 setStatus("列表失败：" + error.getMessage(), WARN);
+            }
+        }).start();
+    }
+
+    /** Long-press menu: rename / pin / archive through the session.admin channel. */
+    private void showSessionMenu(String sessionId) {
+        String[] items = {"重命名", "置顶", "归档"};
+        new AlertDialog.Builder(this)
+                .setTitle("会话操作")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) askRename(sessionId);
+                    else if (which == 1) adminCall("session.pin", sessionId, null);
+                    else adminCall("session.archive", sessionId, null);
+                })
+                .show();
+    }
+
+    private void askRename(String sessionId) {
+        EditText input = new EditText(this);
+        input.setTextColor(FG);
+        new AlertDialog.Builder(this)
+                .setTitle("重命名")
+                .setView(input)
+                .setPositiveButton("保存", (d, w) -> {
+                    String title = input.getText().toString().trim();
+                    if (!title.isEmpty()) adminCall("session.rename", sessionId, title);
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void adminCall(String method, String sessionId, String title) {
+        new Thread(() -> {
+            try {
+                JSONObject payload = new JSONObject().put("sessionId", sessionId);
+                if (title != null) payload.put("title", title);
+                bridge.call(method, payload, 15000);
+                runOnUiThread(() -> { toast("已提交"); loadSessions(); });
+            } catch (Exception error) {
+                setStatus("操作失败：" + describe(error), WARN);
             }
         }).start();
     }
