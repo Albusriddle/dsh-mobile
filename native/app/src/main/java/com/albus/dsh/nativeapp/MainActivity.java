@@ -198,6 +198,18 @@ public class MainActivity extends Activity {
             pairAsync(token);
         });
         panel.addView(pair, matchWidth());
+
+        Button scan = new Button(this);
+        scan.setText("扫码配对");
+        scan.setOnClickListener(v -> {
+            if (checkSelfPermission(android.Manifest.permission.CAMERA)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.CAMERA}, 7);
+                return;
+            }
+            startActivityForResult(new android.content.Intent(this, ScanActivity.class), 8);
+        });
+        panel.addView(scan, matchWidth());
         panel.addView(label("提示：adb reverse tcp:3080 tcp:3080 后可连 ws://127.0.0.1:3080；外网用 wss://<ts.net 域名>", DIM, 11, false));
         return panel;
     }
@@ -301,6 +313,32 @@ public class MainActivity extends Activity {
         pairPanel.setVisibility(panel == pairPanel ? View.VISIBLE : View.GONE);
         listPanel.setVisibility(panel == listPanel ? View.VISIBLE : View.GONE);
         chatPanel.setVisibility(panel == chatPanel ? View.VISIBLE : View.GONE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 8 && resultCode == RESULT_OK && data != null) {
+            String qr = data.getStringExtra("qr");
+            if (qr != null) pairFromQr(qr);
+        }
+    }
+
+    /** A scanned pairing URL carries the bootstrap token in its query. */
+    private void pairFromQr(String qr) {
+        String token = qr;
+        String baseValue = this.base;
+        int tokenAt = qr.indexOf("token=");
+        if (tokenAt >= 0) {
+            token = qr.substring(tokenAt + 6);
+            int amp = token.indexOf('&');
+            if (amp > 0) token = token.substring(0, amp);
+            int pathAt = qr.indexOf("/ios/v1");
+            if (pathAt > 0) baseValue = qr.substring(0, pathAt);
+        }
+        this.base = baseValue;
+        prefs().edit().putString("base", baseValue).apply();
+        pairAsync(token);
     }
 
     private void toast(String text) {
