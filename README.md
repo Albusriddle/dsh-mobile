@@ -85,8 +85,12 @@ DeepSeek Harness（DSH）的 Android 手机端工程，含两条路线：
 - ✅ 重连：`Authorization: Bearer <deviceToken>`
 - ✅ 会话列表：`session.list`，按 `cwd` 分组
 - ✅ 打开会话：`session.snapshot` 渲染 user / assistant / tool 条目
-- ⏳ 发送与中断：`session.prompt` / `session.interrupt` 已接好，待真机验证
-- ⏳ 审批弹层、增量续传、后台保活（P2）
+- ✅ 发送与中断：`session.prompt` / `session.interrupt`，发送后限时轮询快照保证回复可见
+- ✅ 实时增量：`session.delta` 去抖触发快照刷新
+- ✅ 断线重连 + 状态条
+- ✅ 会话搜索、重命名 / 置顶 / 归档（`session.admin.v1`）
+- ✅ 扫码配对（ZXing）、前台服务保活、令牌 Keystore 加密
+- ⚠️ 审批弹层（`approval.request` / `approval.resolve` / `approvals.v1` 重放）：**代码完成，本机未能触发验证**——探测时 agent 未真正调用需要授权的工具（见 `scripts/approve-probe*.mjs`）
 
 ### 网络
 
