@@ -14,9 +14,27 @@ android {
         versionName "0.1.0"
     }
 
+    signingConfigs {
+        release {
+            // Local release key; absent in CI, where the debug build is used.
+            def props = new Properties()
+            def file = rootProject.file('keystore.properties')
+            if (file.exists()) {
+                props.load(new FileInputStream(file))
+                storeFile rootProject.file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            if (file('keystore.properties').exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 

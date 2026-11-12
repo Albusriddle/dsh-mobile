@@ -46,6 +46,7 @@ const jsonOrThrow = async (res, what) => {
 }
 
 const skip = new Set(['.git', 'node_modules', 'build', '.gradle'])
+const skipFiles = new Set(['keystore.jks', 'keystore.properties', 'local.properties'])
 function walk(base, out = []) {
   for (const name of readdirSync(base)) {
     if (skip.has(name)) continue
@@ -57,7 +58,8 @@ function walk(base, out = []) {
   return out
 }
 
-const files = walk(dir).filter((p) => !p.endsWith('.apk') && !p.endsWith('.aab'))
+const files = walk(dir).filter((p) => !p.endsWith('.apk') && !p.endsWith('.aab')
+  && !skipFiles.has(p.split(/[\\/]/).pop()))
 console.log(`uploading ${files.length} files to ${slug}@${branch}`)
 
 const entries = []
