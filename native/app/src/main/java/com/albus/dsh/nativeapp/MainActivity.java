@@ -440,6 +440,10 @@ public class MainActivity extends Activity {
     }
 
     private void openSession(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            toast("这是占位行（还没有会话 id），先新建会话再用");
+            return;
+        }
         currentSession = sessionId;
         chatText.setLength(0);
         new Thread(() -> {
@@ -454,7 +458,7 @@ public class MainActivity extends Activity {
                     scrollDown();
                 });
             } catch (Exception error) {
-                setStatus("打开失败：" + error.getMessage(), WARN);
+                setStatus("打开失败：" + describe(error), WARN);
             }
         }).start();
     }
@@ -508,6 +512,11 @@ public class MainActivity extends Activity {
             }
         }
         return builder.toString().trim();
+    }
+
+    private static String describe(Exception error) {
+        String message = error.getMessage();
+        return message == null || message.isEmpty() ? error.getClass().getSimpleName() : message;
     }
 
     private static String shorten(String text, int max) {
