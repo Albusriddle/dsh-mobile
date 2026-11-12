@@ -86,6 +86,9 @@ public class MainActivity extends Activity {
     private final List<String> listIds = new ArrayList<>();
     private ArrayAdapter<String> listAdapter;
     private final StringBuilder chatText = new StringBuilder();
+    private volatile boolean sending;
+    private String pendingRequestId;
+    private volatile long lastDeltaRefresh;
     private final Map<String, JSONObject> pendingApprovals = new LinkedHashMap<>();
 
     @Override
@@ -539,11 +542,10 @@ public class MainActivity extends Activity {
             if (payload == null) return;
             String sessionId = payload.optString("sessionId");
             if (currentSession != null && currentSession.equals(sessionId)) {
-                String kind = payload.optString("kind");
-                String text = payload.optString("text", "");
-                if ("text".equals(kind) && !text.isEmpty()) {
-                    chatText.append(text);
-                    runOnUiThread(() -> { transcript.setText(chatText.toString()); scrollDown(); });
+                long now = System.currentTimeMillis();
+                if (now - lastDeltaRefresh > 1200) {
+                    lastDeltaRefresh = now;
+                    new Thread(this::refreshTranscript).start();
                 }
             }
         }
@@ -575,6 +577,10 @@ public class MainActivity extends Activity {
     private void sendPrompt() {
         String text = composer.getText().toString().trim();
         if (text.isEmpty() || currentSession == null) return;
+        if (sending) { toast("上一条还在发送，请稍候"); return; }
+        sending = true;
+        if (pendingRequestId == null) pendingRequestId = UUID.randomUUID().toString();
+        final String requestId = pendingRequestId;
         composer.setText("");
         chatText.append("\n你：").append(text).append('\n');
         transcript.setText(chatText.toString());
@@ -584,11 +590,43 @@ public class MainActivity extends Activity {
                 bridge.call("session.prompt", new JSONObject()
                         .put("sessionId", currentSession)
                         .put("text", text)
-                        .put("requestId", UUID.randomUUID().toString()), 20000);
+                        .put("requestId", requestId), 20000);
+                pendingRequestId = null;
+                // The bridge streams answers as deltas; a short poll keeps the
+                // transcript correct even when an event is missed.
+                for (int i = 0; i < 12; i++) {
+                    Thread.sleep(2500);
+                    refreshTranscript();
+                }
             } catch (Exception error) {
-                setStatus("发送失败：" + error.getMessage(), WARN);
+                setStatus("发送失败：" + describe(error), WARN);
+            } finally {
+                sending = false;
             }
         }).start();
+    }
+
+    /** Re-read the whole session and repaint (cheap enough for a phone-sized turn). */
+    private void refreshTranscript() {
+        String sessionId = currentSession;
+        if (sessionId == null) return;
+        try {
+            JSONObject result = bridge.call("session.snapshot",
+                    new JSONObject().put("sessionId", sessionId), 20000);
+            JSONArray turns = result.optJSONArray("turns");
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; turns != null && i < turns.length(); i++) renderTurn(builder, turns.getJSONObject(i));
+            final String text = builder.length() == 0 ? "(空会话)" : builder.toString();
+            if (!sessionId.equals(currentSession)) return;
+            runOnUiThread(() -> {
+                chatText.setLength(0);
+                chatText.append(text);
+                transcript.setText(text);
+                scrollDown();
+            });
+        } catch (Exception ignored) {
+            // A poll is best-effort; the next one retries.
+        }
     }
 
     private void interrupt() {
