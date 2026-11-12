@@ -313,6 +313,16 @@ public class MainActivity extends Activity {
         };
     }
 
+    /** Foreground service so the socket survives the app going to the background. */
+    private void startKeepAlive() {
+        android.content.Intent intent = new android.content.Intent(this, KeepAliveService.class);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
+    }
+
     private void reconnectLater() {
         if (deviceToken.isEmpty()) return;
         new Thread(() -> {
@@ -330,6 +340,7 @@ public class MainActivity extends Activity {
                         .put("proto", 1).put("minor", 0).put("client", "android/0.1")
                         .put("cap", new JSONArray(CAPS)), 10000);
                 setStatus("已连接 · " + base, OK);
+                startKeepAlive();
                 runOnUiThread(() -> { show(listPanel); loadSessions(); });
             } catch (Exception error) {
                 setStatus("连接失败：" + error.getMessage(), WARN);
@@ -715,6 +726,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        stopService(new android.content.Intent(this, KeepAliveService.class));
         bridge.close();
         super.onDestroy();
     }
